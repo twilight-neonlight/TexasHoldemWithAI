@@ -98,24 +98,13 @@ public class GameController {
     // ── 로그 생성 ─────────────────────────────────────────────────────────────
 
     /**
-     * 현재 State 기반 로그 라인 목록을 반환합니다.
+     * 현재 State 기반 누적된 로그 라인 목록을 반환합니다.
      */
     public synchronized List<String> getLog() {
         List<String> lines = new ArrayList<>();
-        lines.add(LanguageManager.get("log.hand", 
+        lines.add(String.format("Hand #%d | Stage: %s | Pot: %d | Bet: %d",
             state.handNumber, state.stage, state.pot, state.currentBet));
-
-        if (state.lastAIName != null) {
-            lines.add(LanguageManager.get("log.ai",
-                state.lastAIName, state.lastAIStyle,
-                state.toCall, state.lastAIAction, state.lastAIWinRate));
-        }
-        if (state.lastHumanAction != null) {
-            lines.add(LanguageManager.get("log.human", state.lastHumanAction));
-        }
-        if (state.lastEvent != null) {
-            lines.add(LanguageManager.get("log.event", state.lastEvent));
-        }
+        lines.addAll(state.logHistory);
         return lines;
     }
 

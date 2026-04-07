@@ -70,13 +70,15 @@ public class Game {
         public int  bigBlindIdx;   // 이번 핸드의 BB 플레이어 인덱스
         public int  toCall;        // 현재 플레이어가 콜하려면 필요한 금액 (UI 표시용)
 
-        // 로그용 마지막 이벤트 (매 State마다 최신 1건)
+        // 로그 히스토리 (누적)
+        public List<String> logHistory;
+        
+        // 전지적 모드용 최신 AI 정보 (나머지 필드는 logHistory에 포함)
         public String lastAIName;
         public String lastAIStyle;
         public double lastAIWinRate;
+        public int    lastAIToCall;
         public String lastAIAction;
-        public String lastHumanAction;
-        public String lastEvent; // "AI_1 wins with Full House" 등 핸드 결과
     }
 
     // ── 상수 ──────────────────────────────────────────────────────────────────
@@ -118,6 +120,7 @@ public class Game {
         s.bigBlindAmt     = BIG_BLIND;
         s.currentBet      = 0;
         s.toCall          = 0;
+        s.logHistory      = new ArrayList<>();
         return s;
     }
 
@@ -152,7 +155,7 @@ public class Game {
         s.community       = new ArrayList<>();
         s.stage           = Stage.PREFLOP;
         s.handNumber      = prev.handNumber + 1;
-        s.lastEvent       = null;
+        s.logHistory      = new ArrayList<>(); // 새 핸드마다 로그 초기화
 
         // 프리플랍 첫 액션: BB 다음 플레이어
         s.currentPlayer   = nextActiveIdx(s.players, s.bigBlindIdx);
@@ -227,9 +230,15 @@ public class Game {
 
         applyAction(s, p, action, toCall);
 
+        // 로그: 액션만 저장. 상세 정보는 별도 필드에 저장하고, MainApplication에서 처리
+        String logLine = "[AI] " + p.name + " → " + action;
+        s.logHistory.add(logLine);
+        
+        // 전지적 모드 활성화 시 상세 정보를 노출하기 위해 State에 보관
         s.lastAIName    = p.name;
         s.lastAIStyle   = p.style;
         s.lastAIWinRate = winRate;
+        s.lastAIToCall  = toCall;
         s.lastAIAction  = action;
 
         return advance(s, idx);
@@ -244,7 +253,10 @@ public class Game {
 
         int toCall = Math.max(0, s.currentBet - p.streetBet);
         applyAction(s, p, type, toCall);
-        s.lastHumanAction = type;
+        
+        // 로그 히스토리에 추가
+        String logLine = "[You] → " + type;
+        s.logHistory.add(logLine);
 
         return advance(s, idx);
     }
@@ -308,7 +320,11 @@ public class Game {
 
         winner.stack += s.pot;
         s.pot         = 0;
-        s.lastEvent   = winDesc;
+        
+        // 로그 히스토리에 추가
+        String logLine = "*** " + winDesc + " ***";
+        s.logHistory.add(logLine);
+        
         return s;
     }
 
@@ -416,6 +432,7 @@ public class Game {
         s.smallBlindIdx   = prev.smallBlindIdx;
         s.bigBlindIdx     = prev.bigBlindIdx;
         s.toCall          = prev.toCall;
+        s.logHistory      = new ArrayList<>(prev.logHistory);
         return s;
     }
 }

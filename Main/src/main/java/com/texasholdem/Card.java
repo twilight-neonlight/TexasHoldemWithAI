@@ -10,10 +10,10 @@ public class Card {
 
     // ── Suit (무늬) ────────────────────────────────────────────────────────────
     public enum Suit {
-        SPADES  ('s', "♠"),
-        HEARTS  ('h', "♥"),
-        DIAMONDS('d', "♦"),
-        CLUBS   ('c', "♣");
+        SPADES  ('s', "♠️"),
+        HEARTS  ('h', "♥️"),
+        DIAMONDS('d', "♦️"),
+        CLUBS   ('c', "♣️");
 
         public final char   symbol;  // 파싱용 단일 문자 ('s', 'h', 'd', 'c')
         public final String display; // UI 표시용 유니코드 심볼

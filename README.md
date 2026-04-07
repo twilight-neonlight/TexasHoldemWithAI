@@ -42,16 +42,16 @@ category 값이 클수록 강한 족보:
 
 | category | 족보 | 예시 |
 |---|---|---|
-| 10 | Royal Straight Flush | ♠️T ♠️J ♠️Q ♠️K ♠️A |
-| 9 | Straight Flush  | ♠️9 ♥️T ♦️J ♣️Q ♠️K |
-| 8 | Four of a Kind  | ♣️A ♥️A ♦️A ♠️A ♣️K |
-| 7 | Full House      | ♣️K ♥️K ♦️K ♣️Q ♥️Q |
-| 6 | Flush           | ♥️2 ♥️5 ♥️8 ♥️9 ♥️K |
-| 5 | Straight        | ♠️5 ♥️6 ♦️7 ♣️8 ♠️9 |
-| 4 | Three of a Kind | ♠️J ♥️J ♦️J ♣️Q ♠️7 |
-| 3 | Two Pair        | ♠️A ♥️A ♦️K ♣️K ♠️3 |
-| 2 | One Pair        | ♠️T ♥️T ♦️2 ♣️5 ♠️9 |
-| 1 | High Card       | ♠️2 ♥️5 ♦️8 ♣️J ♠️A |
+| 10 | Royal Straight Flush | T♠️ J♠️ Q♠️ K♠️ A♠️ |
+| 9 | Straight Flush  | 9♠️ T♥️ J♦️ Q♣️ K♠️ |
+| 8 | Four of a Kind  | A♣️ A♥️ A♦️ A♠️ K♣️ |
+| 7 | Full House      | K♣️ K♥️ K♦️ Q♣️ Q♥️ |
+| 6 | Flush           | 2♥️ 5♥️ 8♥️ 9♥️ K♥️ |
+| 5 | Straight        | 5♠️ 6♥️ 7♦️ 8♣️ 9♠️ |
+| 4 | Three of a Kind | J♠️ J♥️ J♦️ Q♣️ 7♠️ |
+| 3 | Two Pair        | A♠️ A♥️ K♦️ K♣️ 3♠️ |
+| 2 | One Pair        | T♠️ T♥️ 2♦️ 5♣️ 9♠️ |
+| 1 | High Card       | 2♠️ 5♥️ 8♦️ J♣️ A♠️ |
 
 ### AI (`AI`)
 

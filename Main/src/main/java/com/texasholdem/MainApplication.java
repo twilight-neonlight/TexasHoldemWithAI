@@ -16,7 +16,7 @@ public class MainApplication extends JFrame {
     private JSlider speedSlider;
     private JCheckBox omniscientCheck;
     private JPanel humanActionsPanel, communityPanel, playersPanel;
-    private JLabel potLabel;
+    private JLabel potLabel, stateInfoLabel;
 
     public MainApplication() {
         setTitle("Texas Holdem with AI");
@@ -62,14 +62,26 @@ public class MainApplication extends JFrame {
         tablePanel.setLayout(new BorderLayout());
         tablePanel.setBorder(BorderFactory.createTitledBorder(LanguageManager.get("panel.pokerTable")));
 
+        // 상단: 게임 상태 정보 (Hand, Stage, Pot, Bet)
+        stateInfoLabel = new JLabel("Hand #0 | Stage: READY | Pot: 0 | Bet: 0");
+        stateInfoLabel.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
+        stateInfoLabel.setHorizontalAlignment(SwingConstants.CENTER);
+        tablePanel.add(stateInfoLabel, BorderLayout.NORTH);
+
+        // 중앙: 팟 + 커뮤니티 카드
+        JPanel centerPanel = new JPanel(new BorderLayout());
+        
         potLabel = new JLabel(LanguageManager.get("label.pot") + " 0", SwingConstants.CENTER);
         potLabel.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 24));
         potLabel.setForeground(Color.GREEN);
-        tablePanel.add(potLabel, BorderLayout.CENTER);
+        centerPanel.add(potLabel, BorderLayout.CENTER);
 
         communityPanel = new JPanel();
+        communityPanel.setLayout(new FlowLayout(FlowLayout.CENTER, 5, 5));
         communityPanel.setBorder(BorderFactory.createTitledBorder(LanguageManager.get("panel.communityCards")));
-        tablePanel.add(communityPanel, BorderLayout.NORTH);
+        centerPanel.add(communityPanel, BorderLayout.NORTH);
+        
+        tablePanel.add(centerPanel, BorderLayout.CENTER);
 
         humanActionsPanel = new JPanel();
         humanActionsPanel.setBorder(BorderFactory.createTitledBorder(LanguageManager.get("panel.yourActions")));
@@ -107,7 +119,11 @@ public class MainApplication extends JFrame {
         });
         stepBtn = createButton("button.step", "tooltip.step", e -> gameController.step());
         resetBtn = createButton("button.reset", "tooltip.reset", e -> gameController.init(true));
-        startHandBtn = createButton("button.startHand", "tooltip.startHand", e -> gameController.startHand());
+        startHandBtn = createButton("button.startHand", "tooltip.startHand", e -> {
+            gameController.startHand();
+            gameController.setPlaying(true);
+            updateUI(gameController.getState());
+        });
         nextStageBtn = createButton("button.nextStage", "tooltip.nextStage", e -> gameController.nextStage());
 
         controlPanel.add(playPauseBtn);
@@ -147,12 +163,10 @@ public class MainApplication extends JFrame {
         add(scrollPane, BorderLayout.SOUTH);
     }
 
-    private JButton createButton(String labelKey, String tooltipKey, javax.swing.event.ChangeListener action) {
+    private JButton createButton(String labelKey, String tooltipKey, java.awt.event.ActionListener action) {
         JButton btn = new JButton(LanguageManager.get(labelKey));
         btn.setToolTipText(LanguageManager.get(tooltipKey));
-        if (action instanceof java.awt.event.ActionListener) {
-            btn.addActionListener((java.awt.event.ActionListener) action);
-        }
+        btn.addActionListener(action);
         return btn;
     }
 
@@ -179,12 +193,24 @@ public class MainApplication extends JFrame {
     private void updateUI(Game.State state) {
         if (state == null) return;
 
-        // 커뮤니티 카드
+        // 상태 정보 업데이트
+        stateInfoLabel.setText(String.format("Hand #%d | Stage: %s | Pot: %d | Bet: %d",
+            state.handNumber, state.stage, state.pot, state.currentBet));
+
+        // 커뮤니티 카드 (5개 슬롯 표시)
         communityPanel.removeAll();
-        for (Card card : state.community) {
-            JLabel cardLabel = new JLabel(card.format());
-            cardLabel.setFont(new Font(Font.MONOSPACED, Font.BOLD, 20));
-            communityPanel.add(cardLabel);
+        for (int i = 0; i < 5; i++) {
+            if (i < state.community.size()) {
+                JLabel cardLabel = new JLabel(state.community.get(i).format());
+                cardLabel.setFont(new Font(Font.MONOSPACED, Font.BOLD, 20));
+                cardLabel.setForeground(Color.BLACK);
+                communityPanel.add(cardLabel);
+            } else {
+                JLabel emptySlot = new JLabel("[ ]");
+                emptySlot.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 18));
+                emptySlot.setForeground(Color.GRAY);
+                communityPanel.add(emptySlot);
+            }
         }
         communityPanel.revalidate();
         communityPanel.repaint();
@@ -225,16 +251,33 @@ public class MainApplication extends JFrame {
         playPauseBtn.setText(gameController.isPlaying() ? LanguageManager.get("button.pause") : LanguageManager.get("button.play"));
         omniscientCheck.setSelected(gameController.isOmniscient());
 
+        // 내 턴이 아니면 게임 컨트롤 버튼 비활성화 (자동으로 내 턴까지 굴러감)
+        boolean isMyTurn = state.waitingForHuman;
+        playPauseBtn.setEnabled(!isMyTurn || state.stage == Game.Stage.READY);
+        stepBtn.setEnabled(false); // Step은 자동 진행 중에는 사용 불가
+        startHandBtn.setEnabled(state.stage == Game.Stage.READY);
+        nextStageBtn.setEnabled(false); // Next Stage는 자동으로 진행됨
+        // resetBtn은 항상 활성화
+
+        // 내 턴일 때만 액션 버튼 활성화
         Component[] components = humanActionsPanel.getComponents();
         for (Component c : components) {
             if (c instanceof JButton) {
-                c.setEnabled(state.waitingForHuman);
+                c.setEnabled(isMyTurn);
             }
         }
 
         logArea.setText("");
         for (String line : gameController.getLog()) {
-            logArea.append(line + "\n");
+            logArea.append(line);
+            
+            // 전지적 모드일 때만 AI의 상세 정보 추가 (toCall, wr)
+            if (gameController.isOmniscient() && line.startsWith("[AI]") && 
+                state.lastAIName != null && line.contains(state.lastAIName)) {
+                logArea.append(" (toCall=" + state.lastAIToCall + ", wr=" + 
+                    String.format("%.2f", state.lastAIWinRate) + ")");
+            }
+            logArea.append("\n");
         }
     }
 
