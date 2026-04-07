@@ -99,23 +99,22 @@ public class GameController {
 
     /**
      * 현재 State 기반 로그 라인 목록을 반환합니다.
-     * JS의 useMemo(() => [...], [state]) 블록에 해당합니다.
      */
     public synchronized List<String> getLog() {
         List<String> lines = new ArrayList<>();
-        lines.add(String.format("Hand #%d | Stage: %s | Pot: %d | Bet: %d",
+        lines.add(LanguageManager.get("log.hand", 
             state.handNumber, state.stage, state.pot, state.currentBet));
 
         if (state.lastAIName != null) {
-            lines.add(String.format("[AI] %s (%s) toCall=%d → %s (wr=%.2f)",
+            lines.add(LanguageManager.get("log.ai",
                 state.lastAIName, state.lastAIStyle,
                 state.toCall, state.lastAIAction, state.lastAIWinRate));
         }
         if (state.lastHumanAction != null) {
-            lines.add("[You] → " + state.lastHumanAction);
+            lines.add(LanguageManager.get("log.human", state.lastHumanAction));
         }
         if (state.lastEvent != null) {
-            lines.add("*** " + state.lastEvent + " ***");
+            lines.add(LanguageManager.get("log.event", state.lastEvent));
         }
         return lines;
     }

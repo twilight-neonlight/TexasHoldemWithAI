@@ -11,8 +11,9 @@ Java로 구현한 텍사스 홀덤 포커 게임 엔진입니다.
 TexasHoldemWithAI/
 └── Main/
     └── src/main/java/com/texasholdem/
-        ├── MainApplication.java # Swing UI 메인 클래스
+        ├── MainApplication.java # Swing UI 메인 클래스 (다국어 지원)
         ├── GameController.java  # 게임 흐름 제어, 자동 진행 타이머
+        ├── LanguageManager.java # 국제화(i18n) 관리 (한국어/영어)
         ├── Game.java            # 게임 상태 및 전이 로직 (순수 함수형)
         ├── AI.java              # 승률 추정 (몬테카를로) + 액션 결정
         ├── HandEval.java        # 핸드 평가 (족보 판정, 7장→최고 5장)
@@ -41,15 +42,16 @@ category 값이 클수록 강한 족보:
 
 | category | 족보 | 예시 |
 |---|---|---|
-| 9 | Straight Flush  | ♠9 ♠T ♠J ♠Q ♠K |
-| 8 | Four of a Kind  | ♠A ♥A ♦A ♣A ♠K |
-| 7 | Full House      | ♠K ♥K ♦K ♠Q ♥Q |
-| 6 | Flush           | ♥2 ♥5 ♥8 ♥9 ♥K |
-| 5 | Straight        | ♠5 ♥6 ♦7 ♣8 ♠9 |
-| 4 | Three of a Kind | ♠J ♥J ♦J ♠2 ♣7 |
-| 3 | Two Pair        | ♠A ♥A ♦K ♣K ♠3 |
-| 2 | One Pair        | ♠T ♥T ♦2 ♣5 ♠9 |
-| 1 | High Card       | ♠2 ♥5 ♦8 ♣J ♠A |
+| 10 | Royal Straight Flush | ♠️T ♠️J ♠️Q ♠️K ♠️A |
+| 9 | Straight Flush  | ♠️9 ♥️T ♦️J ♣️Q ♠️K |
+| 8 | Four of a Kind  | ♣️A ♥️A ♦️A ♠️A ♣️K |
+| 7 | Full House      | ♣️K ♥️K ♦️K ♣️Q ♥️Q |
+| 6 | Flush           | ♥️2 ♥️5 ♥️8 ♥️9 ♥️K |
+| 5 | Straight        | ♠️5 ♥️6 ♦️7 ♣️8 ♠️9 |
+| 4 | Three of a Kind | ♠️J ♥️J ♦️J ♣️Q ♠️7 |
+| 3 | Two Pair        | ♠️A ♥️A ♦️K ♣️K ♠️3 |
+| 2 | One Pair        | ♠️T ♥️T ♦️2 ♣️5 ♠️9 |
+| 1 | High Card       | ♠️2 ♥️5 ♦️8 ♣️J ♠️A |
 
 ### AI (`AI`)
 
@@ -143,6 +145,7 @@ java com.texasholdem.MainApplication
 - **테이블 중앙**: 팟 금액과 커뮤니티 카드 표시
 - **왼쪽 패널**: 플레이어 정보 (이름, 칩, 베팅액, 포지션, 카드)
 - **오른쪽 패널**: 게임 컨트롤 버튼과 설정
+- **상단**: 게임 제목과 **언어 선택 드롭다운** (한국어/English)
 - **하단**: 액션 로그와 사람 액션 버튼
 
 ### 컨트롤 버튼
@@ -154,6 +157,14 @@ java com.texasholdem.MainApplication
 - **Speed 슬라이더**: AI 진행 속도 조절
 - **Omniscient Mode**: 모든 카드 공개 (디버그용)
 - **Help**: 게임 사용법 표시
+
+### 다국어 지원 (Internationalization)
+- **언어 선택**: 상단 헤더의 Language 드롭다운에서 선택
+- **지원 언어**: 한국어 (한국어), English (English)
+- **동적 업데이트**: 언어 변경 시 모든 UI 레이블, 툴팁, 액션 로그가 실시간으로 업데이트
+- **LanguageManager**: 중앙화된 i18n 관리 클래스
+  - 50+ 번역 키 포함 (버튼, 라벨, 툴팁, 게임 로그 템플릿)
+  - `LanguageManager.get(key)` / `LanguageManager.get(key, args...)` 메서드로 활용
 
 ### 사람 플레이
 - 차례가 되면 하단 액션 버튼 활성화
