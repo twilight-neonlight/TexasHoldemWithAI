@@ -6,39 +6,29 @@ import java.util.function.Consumer;
  * JS의 useTexasHoldem.js에 대응하는 게임 컨트롤러입니다.
  *
  * - 게임 State를 보유하고, 모든 액션을 Game.*() 순수 함수로 위임합니다.
- * - ScheduledExecutorService로 자동 진행 타이머를 관리합니다.
- * - 백그라운드 스레드(타이머)와 메인 스레드가 state를 공유하므로,
- *   state를 읽거나 쓰는 메서드는 모두 synchronized로 보호합니다.
- *
- * 사용 예:
- *   GameController gc = new GameController(false, s -> renderUI(s));
- *   gc.startHand();
- *   gc.setPlaying(true); // 자동 진행 시작
- *   ...
- *   gc.shutdown();       // 앱 종료 시 반드시 호출
+ * - 자동 진행 시 tick()이 반복 호출되며:
+ *     1. 베팅 라운드가 끝났으면 → nextStage 또는 resolveShowdown
+ *     2. 진행 중이면 → AI 한 명 액션 (stepAI)
+ * - 백그라운드 스레드와 메인 스레드 간 state 접근은 synchronized로 보호합니다.
  */
 public class GameController {
 
     private Game.State state;
     private boolean    isPlaying  = false;
-    private int        speedMs    = 700;   // 자동 진행 간격 (밀리초)
-    private boolean    omniscient = false; // 전지적 모드 (상대 카드 공개)
+    private int        speedMs    = 700;
+    private boolean    omniscient = false; // 전지적 모드: 상대 카드 공개
 
     private final ScheduledExecutorService scheduler;
     private ScheduledFuture<?>             timerTask;
 
     /**
-     * 상태가 바뀔 때마다 호출되는 콜백.
-     * JavaFX라면 Platform.runLater(), Swing이라면 SwingUtilities.invokeLater()로 감싸세요.
+     * 상태 변경 시 호출되는 콜백.
+     * JavaFX → Platform.runLater(), Swing → SwingUtilities.invokeLater()로 감싸세요.
      */
     private final Consumer<Game.State> onStateChange;
 
     // ── 생성자 ────────────────────────────────────────────────────────────────
 
-    /**
-     * @param withHuman     사람 플레이어 포함 여부
-     * @param onStateChange 상태 변경 콜백 (null 허용)
-     */
     public GameController(boolean withHuman, Consumer<Game.State> onStateChange) {
         this.state         = Game.createInitialState(withHuman);
         this.onStateChange = onStateChange;
@@ -49,54 +39,46 @@ public class GameController {
         });
     }
 
-    // ── 액션 메서드 (모두 synchronized) ──────────────────────────────────────
+    // ── 액션 메서드 ───────────────────────────────────────────────────────────
 
-    /** 게임을 초기화합니다. 진행 중인 타이머도 중지됩니다. */
     public synchronized void init(boolean withHuman) {
+        stopTimer();
         state = Game.createInitialState(withHuman);
-        notifyChange();
+        notify(state);
     }
 
-    /** 새 핸드를 시작합니다. */
     public synchronized void startHand() {
         state = Game.startHand(state);
-        notifyChange();
+        notify(state);
     }
 
-    /** 다음 스테이지(플랍/턴/리버/쇼다운)로 진행합니다. */
     public synchronized void nextStage() {
         state = Game.nextStage(state);
-        notifyChange();
+        notify(state);
     }
 
-    /** AI 한 명의 액션을 처리합니다. 자동 진행 타이머도 이 메서드를 사용합니다. */
     public synchronized void step() {
         state = Game.stepAI(state);
-        notifyChange();
+        notify(state);
     }
 
-    /** 사람 플레이어의 액션을 처리합니다. */
     public synchronized void humanAction(String type) {
         state = Game.humanAction(state, type);
-        notifyChange();
+        notify(state);
+        // 사람이 액션하면 타이머 재개
+        if (isPlaying) rescheduleTimer();
     }
 
-    /**
-     * 자동 진행을 켜거나 끕니다.
-     * true이면 speedMs 간격으로 step()을 자동 호출합니다.
-     */
     public synchronized void setPlaying(boolean playing) {
         this.isPlaying = playing;
         rescheduleTimer();
     }
 
-    /** 자동 진행 간격을 변경합니다 (밀리초). */
     public synchronized void setSpeed(int ms) {
         this.speedMs = ms;
         if (isPlaying) rescheduleTimer();
     }
 
-    /** 전지적 모드를 토글합니다 (상대 카드 공개 여부). */
     public synchronized void toggleOmniscient() {
         this.omniscient = !this.omniscient;
     }
@@ -111,60 +93,102 @@ public class GameController {
     // ── 로그 생성 ─────────────────────────────────────────────────────────────
 
     /**
-     * 현재 상태를 기반으로 액션 로그 문자열 목록을 반환합니다.
+     * 현재 State 기반 로그 라인 목록을 반환합니다.
      * JS의 useMemo(() => [...], [state]) 블록에 해당합니다.
      */
     public synchronized List<String> getLog() {
         List<String> lines = new ArrayList<>();
-        lines.add(String.format("Hand #%d | Stage: %s | Pot: %d",
-            state.handNumber, state.stage, state.pot));
+        lines.add(String.format("Hand #%d | Stage: %s | Pot: %d | Bet: %d",
+            state.handNumber, state.stage, state.pot, state.currentBet));
 
         if (state.lastAIName != null) {
-            lines.add(String.format("[AI] %s (%s) → %s (wr≈%.2f)",
+            lines.add(String.format("[AI] %s (%s) toCall=%d → %s (wr=%.2f)",
                 state.lastAIName, state.lastAIStyle,
-                state.lastAIAction, state.lastAIWinRate));
+                state.toCall, state.lastAIAction, state.lastAIWinRate));
         }
         if (state.lastHumanAction != null) {
             lines.add("[You] → " + state.lastHumanAction);
         }
+        if (state.lastEvent != null) {
+            lines.add("*** " + state.lastEvent + " ***");
+        }
         return lines;
     }
 
-    // ── 타이머 관리 (내부) ────────────────────────────────────────────────────
+    // ── 타이머 / 자동 진행 ────────────────────────────────────────────────────
 
     /**
-     * 기존 타이머를 취소하고, 재생 중이고 사람 차례가 아니면 새 타이머를 등록합니다.
-     * 반드시 synchronized 컨텍스트 안에서 호출해야 합니다.
+     * 자동 진행의 핵심 tick입니다. speedMs 간격으로 호출됩니다.
+     *
+     * 우선순위:
+     *   1. 쇼다운 or READY → 아무것도 안 함 (isPlaying = false)
+     *   2. 사람 대기 중 → 아무것도 안 함
+     *   3. 베팅 라운드 종료 → nextStage or resolveShowdown
+     *   4. 진행 중 → AI 한 명 액션
      */
-    private void rescheduleTimer() {
-        if (timerTask != null) {
-            timerTask.cancel(false);
-            timerTask = null;
+    private synchronized void tick() {
+        if (!isPlaying) return;
+        if (state.stage == Game.Stage.READY) return;
+        if (state.waitingForHuman) return;
+
+        if (state.stage == Game.Stage.SHOWDOWN) {
+            // 쇼다운 화면을 잠시 보여준 뒤 자동으로 멈춤
+            isPlaying = false;
+            stopTimer();
+            return;
         }
-        if (isPlaying && !state.waitingForHuman) {
+
+        long activeCount = state.players.stream().filter(p -> p.inHand).count();
+
+        if (Game.isBettingRoundOver(state)) {
+            if (activeCount <= 1 || state.stage == Game.Stage.RIVER) {
+                // 핸드 종료: 쇼다운 처리
+                state = Game.resolveShowdown(state);
+                notify(state);
+                isPlaying = false;
+                stopTimer();
+            } else {
+                // 다음 스테이지로 진행
+                state = Game.nextStage(state);
+                notify(state);
+                // 새 스테이지에서 사람 차례면 타이머 정지
+                if (state.waitingForHuman) stopTimer();
+            }
+        } else {
+            // AI 한 명 액션
+            state = Game.stepAI(state);
+            notify(state);
+            // 사람 차례가 됐으면 타이머 정지
+            if (state.waitingForHuman) stopTimer();
+        }
+    }
+
+    /** 기존 타이머를 취소하고 조건에 맞으면 새 타이머를 등록합니다. */
+    private void rescheduleTimer() {
+        stopTimer();
+        if (isPlaying && !state.waitingForHuman
+                && state.stage != Game.Stage.READY
+                && state.stage != Game.Stage.SHOWDOWN) {
             timerTask = scheduler.scheduleAtFixedRate(
-                this::step,          // step() 내부에서도 synchronized 획득
-                speedMs, speedMs, TimeUnit.MILLISECONDS
+                this::tick, speedMs, speedMs, TimeUnit.MILLISECONDS
             );
         }
     }
 
-    /**
-     * state 변경 후 공통으로 호출합니다.
-     * 콜백을 실행하고 타이머 상태를 재조정합니다.
-     */
-    private void notifyChange() {
-        if (onStateChange != null) onStateChange.accept(state);
-        if (isPlaying) rescheduleTimer();
+    private void stopTimer() {
+        if (timerTask != null) {
+            timerTask.cancel(false);
+            timerTask = null;
+        }
+    }
+
+    private void notify(Game.State s) {
+        if (onStateChange != null) onStateChange.accept(s);
     }
 
     // ── 종료 ──────────────────────────────────────────────────────────────────
 
-    /**
-     * 스레드 풀을 정리합니다. 앱 종료 시 반드시 호출하세요.
-     * 호출하지 않으면 타이머 스레드가 JVM 종료를 막을 수 있습니다.
-     * (daemon 스레드로 설정했으므로 보통은 자동 종료되지만 명시적 호출이 안전합니다.)
-     */
+    /** 앱 종료 시 반드시 호출하세요. 스레드 풀을 정리합니다. */
     public void shutdown() {
         scheduler.shutdownNow();
     }
