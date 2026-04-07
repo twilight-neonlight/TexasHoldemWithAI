@@ -14,9 +14,6 @@ public class AI {
     /**
      * 몬테카를로 시뮬레이션으로 승률을 추정합니다.
      *
-     * 매 trial마다 남은 덱을 섞어 보드와 상대 핸드를 무작위로 완성하고,
-     * 내 핸드가 가장 강한 상대보다 같거나 강하면 승리로 카운트합니다.
-     *
      * @param hole      내 홀 카드 2장
      * @param community 현재 공개된 커뮤니티 카드 (0~5장)
      * @param opponents 상대방 수
@@ -62,104 +59,125 @@ public class AI {
     // ── 액션 결정 ─────────────────────────────────────────────────────────────
 
     /**
-     * 상황 적응형 AI 의사결정입니다.
+     * 플레이어 수 + 상대적 승률 + 성향을 모두 반영하는 적응형 의사결정입니다.
+     *
+     * 핵심 아이디어:
+     *   - 절대 승률(winRate) 대신 "평균 대비 상대적 강도(strength)"로 판단
+     *     strength = winRate / baseWinRate  (baseWinRate = 1 / activePlayers)
+     *     → 6인에서 winRate=0.25면 strength=1.5 (평균보다 50% 강함)
+     *     → 2인에서 winRate=0.25면 strength=0.5 (평균보다 약함)
+     *   - foldTh / raiseTh를 strength 단위로 설정하면 플레이어 수 변화에 자동 대응
+     *   - 팟 오즈(Pot Odds), 기대값(EV), 블러프를 보조 레이어로 추가
      *
      * 판단 순서:
-     *   1. 팟 오즈(Pot Odds) 계산 → 최소 요구 승률 도출
-     *   2. 게임 단계별 foldTh / raiseTh 조정
-     *   3. 기대값(EV) = winRate × pot - (1 - winRate) × toCall 계산
-     *   4. 블러프 확률 적용 (Aggressive 성향 위주)
+     *   1. strength 계산 (상대적 핸드 강도)
+     *   2. 단계 × 성향 기반 foldTh / raiseTh 결정
+     *   3. 팟 오즈(potOdds) 계산 → EV 음수여도 potOdds 만족 시 콜 허용
+     *   4. 블러프 확률 적용
      *   5. 최종 액션 결정
      *
-     * @param style   "Tight Passive" | "Tight Aggressive" | "Loose Passive" | "Loose Aggressive"
-     * @param winRate estimateWinRate() 결과 (0.0 ~ 1.0)
-     * @param toCall  콜에 필요한 칩
-     * @param stack   현재 보유 칩
-     * @param pot     현재 팟 크기
-     * @param stage   현재 게임 단계
+     * @param style         "Tight Passive" | "Tight Aggressive" | "Loose Passive" | "Loose Aggressive"
+     * @param winRate       estimateWinRate() 결과 (0.0 ~ 1.0)
+     * @param toCall        콜에 필요한 칩
+     * @param stack         현재 보유 칩
+     * @param pot           현재 팟 크기
+     * @param stage         현재 게임 단계
+     * @param activePlayers 현재 핸드에 남아 있는 플레이어 수 (자신 포함)
      * @return "fold" | "call" | "check" | "raise"
      */
     public static String aiDecide(String style, double winRate, int toCall,
-                                   int stack, int pot, Game.Stage stage) {
+                                   int stack, int pot, Game.Stage stage,
+                                   int activePlayers) {
         boolean tight = style.contains("Tight");
         boolean aggro = style.contains("Aggressive");
 
-        // ── 1. 팟 오즈: 최소 요구 승률 ──────────────────────────────────────
-        // 팟 오즈 = 콜 비용 / (팟 + 콜 비용)
-        // 콜이 없으면(0) potOdds = 0 → 어떤 승률이든 콜 가능
-        double potOdds = (toCall > 0) ? (double) toCall / (pot + toCall) : 0.0;
+        // ── 1. 상대적 핸드 강도 ──────────────────────────────────────────────
+        // baseWinRate: 랜덤 핸드가 N명 중 이길 기대 승률 = 1/N
+        // strength > 1.0 → 평균보다 강한 핸드
+        // strength < 1.0 → 평균보다 약한 핸드
+        int    n            = Math.max(activePlayers, 2); // 최소 2명 기준
+        double baseWinRate  = 1.0 / n;
+        double strength     = winRate / baseWinRate;
 
-        // ── 2. 단계별 임계값 ─────────────────────────────────────────────────
-        // Preflop: 정보가 적으므로 보수적. Flop 이후 공개 정보 기반으로 공격적으로.
-        double foldTh;
-        double raiseTh;
+        // ── 2. 단계 × 성향 기반 임계값 ──────────────────────────────────────
+        // 단위: strength 배율 (예: foldTh=1.2 → 평균 승률의 1.2배 미만이면 폴드)
+        // tight → foldTh 높임 (더 보수적), aggro → raiseTh 낮춤 (더 공격적)
+        double foldTh;    // 이 미만이면 폴드 고려
+        double raiseTh;   // 이 초과이면 레이즈 고려
         double bluffBase; // 블러프 기본 확률
 
         switch (stage) {
             case PREFLOP:
-                foldTh    = tight ? 0.28 : 0.20;
-                raiseTh   = aggro ? 0.50 : 0.58;
+                // 정보가 없으므로 보수적으로 시작
+                foldTh    = tight ? 1.40 : 1.20;
+                raiseTh   = aggro ? 2.20 : 2.50;
                 bluffBase = aggro ? 0.06 : 0.02;
                 break;
             case FLOP:
-                foldTh    = tight ? 0.26 : 0.18;
-                raiseTh   = aggro ? 0.47 : 0.55;
+                // 커뮤니티 3장 공개 → 핸드 방향성 확인, 점차 공격적으로
+                foldTh    = tight ? 1.30 : 1.10;
+                raiseTh   = aggro ? 2.00 : 2.30;
                 bluffBase = aggro ? 0.08 : 0.03;
                 break;
             case TURN:
-                foldTh    = tight ? 0.24 : 0.16;
-                raiseTh   = aggro ? 0.45 : 0.53;
+                // 드로우 가치 확정에 가까워짐
+                foldTh    = tight ? 1.20 : 1.00;
+                raiseTh   = aggro ? 1.85 : 2.10;
                 bluffBase = aggro ? 0.06 : 0.02;
                 break;
             case RIVER:
-                // 리버: 드로우 없음 → 핸드 강도에만 집중, 블러프 소폭 허용
-                foldTh    = tight ? 0.22 : 0.14;
-                raiseTh   = aggro ? 0.43 : 0.50;
+                // 확정된 핸드 강도로만 판단, 블러프 소폭 허용
+                foldTh    = tight ? 1.10 : 0.90;
+                raiseTh   = aggro ? 1.70 : 1.95;
                 bluffBase = aggro ? 0.09 : 0.03;
                 break;
             default:
-                foldTh    = tight ? 0.28 : 0.20;
-                raiseTh   = aggro ? 0.50 : 0.58;
+                foldTh    = tight ? 1.40 : 1.20;
+                raiseTh   = aggro ? 2.20 : 2.50;
                 bluffBase = 0.03;
         }
 
-        // ── 3. 기대값(EV) ────────────────────────────────────────────────────
-        // EV > 0: 콜/레이즈가 장기적으로 이익
-        // pot은 콜 후 기준으로 계산 (콜하면 pot + toCall을 획득할 수 있음)
-        double ev = winRate * (pot + toCall) - (1.0 - winRate) * toCall;
+        // ── 3. 팟 오즈 & 기대값(EV) ─────────────────────────────────────────
+        // potOdds: 콜이 수학적으로 정당한 최소 승률
+        //   potOdds = toCall / (pot + toCall)
+        // EV: 장기 기댓값. 양수이면 콜/레이즈가 이익
+        //   EV = winRate × (pot + toCall) - (1 - winRate) × toCall
+        double potOdds = (toCall > 0) ? (double) toCall / (pot + toCall) : 0.0;
+        double ev       = winRate * (pot + toCall) - (1.0 - winRate) * toCall;
 
         // ── 4. 블러프 판단 ───────────────────────────────────────────────────
-        // 승률이 낮아도 스택이 충분하고 확률적으로 레이즈 (상대 압박)
-        // Loose 성향은 블러프 범위가 더 넓음
+        // strength < foldTh (약한 핸드)이지만 확률적으로 레이즈 → 상대 압박
+        // Loose 성향은 블러프 범위 1.5배
         double bluffProb = bluffBase * (tight ? 1.0 : 1.5);
-        boolean bluff = winRate < foldTh && stack > toCall * 2
-                        && RNG.nextDouble() < bluffProb;
+        boolean bluff    = strength < foldTh
+                           && stack > toCall * 2
+                           && RNG.nextDouble() < bluffProb;
 
-        // ── 5. 액션 결정 ─────────────────────────────────────────────────────
+        // ── 5. 최종 액션 결정 ────────────────────────────────────────────────
 
-        // 블러프 레이즈 (승률이 낮아도 압박)
+        // 블러프: 약한 핸드에서 확률적 레이즈
         if (bluff) return "raise";
 
-        // 콜 상황: 팟 오즈 + foldTh 동시 판단
-        // - winRate가 potOdds보다 낮고, foldTh도 밑돌면 폴드
-        if (toCall > 0 && winRate < foldTh && winRate < potOdds) return "fold";
-
-        // EV가 음수이고 foldTh 미달이면 폴드
-        if (toCall > 0 && ev < 0 && winRate < foldTh) return "fold";
-
         // 강한 핸드 → 레이즈
-        if (winRate > raiseTh && stack > toCall) return "raise";
+        if (strength >= raiseTh && stack > toCall) return "raise";
 
-        // Aggressive + check 상황에서 중간 핸드도 레이즈
-        if (toCall == 0 && aggro && winRate > raiseTh - 0.08) return "raise";
+        // Aggressive + check 상황: raiseTh 약간 밑돌아도 레이즈
+        if (toCall == 0 && aggro && strength >= raiseTh - 0.30) return "raise";
 
-        // 팟 오즈상 콜이 정당한 경우: winRate >= potOdds이면 콜
+        // 중간 핸드 영역 (foldTh ≤ strength < raiseTh)
+        if (strength >= foldTh) {
+            // 팟 오즈 만족 or EV 양수이면 콜, 아니면 체크/콜
+            return toCall > 0 ? "call" : "check";
+        }
+
+        // 약한 핸드 (strength < foldTh)
+        // 팟 오즈가 낮아서 콜이 수학적으로 정당한 경우 → 콜 허용
         if (toCall > 0 && winRate >= potOdds) return "call";
 
-        // EV > 0이면 콜
+        // EV 양수이면 콜 (비용 대비 기대 수익이 있음)
         if (toCall > 0 && ev > 0) return "call";
 
-        // 그 외: 코스트 없으면 체크, 있으면 폴드
+        // 그 외: 코스트가 없으면 체크, 있으면 폴드
         return toCall > 0 ? "fold" : "check";
     }
 }

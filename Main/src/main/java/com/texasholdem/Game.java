@@ -226,7 +226,7 @@ public class Game {
         int    toCall    = Math.max(0, s.currentBet - p.streetBet);
 
         double winRate = AI.estimateWinRate(p.hole, s.community, opponents, 150);
-        String action  = AI.aiDecide(p.style, winRate, toCall, p.stack, s.pot, s.stage);
+        String action  = AI.aiDecide(p.style, winRate, toCall, p.stack, s.pot, s.stage, (int) alive);
 
         applyAction(s, p, action, toCall);
 
