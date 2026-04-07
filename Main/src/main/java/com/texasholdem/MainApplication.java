@@ -2,6 +2,7 @@ package com.texasholdem;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.List;
 
 /**
  * Swing UI로 Texas Holdem 게임을 실행합니다.
@@ -254,7 +255,8 @@ public class MainApplication extends JFrame {
         // 내 턴이 아니면 게임 컨트롤 버튼 비활성화 (자동으로 내 턴까지 굴러감)
         boolean isMyTurn = state.waitingForHuman;
         playPauseBtn.setEnabled(!isMyTurn || state.stage == Game.Stage.READY);
-        stepBtn.setEnabled(false); // Step은 자동 진행 중에는 사용 불가
+        stepBtn.setEnabled(!gameController.isPlaying() && !isMyTurn
+                && state.stage != Game.Stage.READY && state.stage != Game.Stage.SHOWDOWN);
         startHandBtn.setEnabled(state.stage == Game.Stage.READY);
         nextStageBtn.setEnabled(false); // Next Stage는 자동으로 진행됨
         // resetBtn은 항상 활성화
@@ -268,14 +270,15 @@ public class MainApplication extends JFrame {
         }
 
         logArea.setText("");
-        for (String line : gameController.getLog()) {
+        List<String> log = gameController.getLog();
+        for (int i = 0; i < log.size(); i++) {
+            String line = log.get(i);
             logArea.append(line);
-            
-            // 전지적 모드일 때만 AI의 상세 정보 추가 (toCall, wr)
-            if (gameController.isOmniscient() && line.startsWith("[AI]") && 
-                state.lastAIName != null && line.contains(state.lastAIName)) {
-                logArea.append(" (toCall=" + state.lastAIToCall + ", wr=" + 
-                    String.format("%.2f", state.lastAIWinRate) + ")");
+            // 전지적 모드: 마지막 AI 액션 줄에만 상세 정보 추가
+            if (gameController.isOmniscient() && state.lastAIName != null
+                    && i == log.size() - 1 && line.startsWith("[AI]")) {
+                logArea.append(" (toCall=" + state.lastAIToCall
+                    + ", wr=" + String.format("%.2f", state.lastAIWinRate) + ")");
             }
             logArea.append("\n");
         }

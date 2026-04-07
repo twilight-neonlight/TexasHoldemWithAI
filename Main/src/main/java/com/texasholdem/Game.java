@@ -225,7 +225,7 @@ public class Game {
         int    opponents = (int) Math.max(0, alive - 1);
         int    toCall    = Math.max(0, s.currentBet - p.streetBet);
 
-        double winRate = AI.estimateWinRate(p.hole, s.community, opponents, 250);
+        double winRate = AI.estimateWinRate(p.hole, s.community, opponents, 150);
         String action  = AI.aiDecide(p.style, winRate, toCall, p.stack);
 
         applyAction(s, p, action, toCall);
@@ -352,7 +352,7 @@ public class Game {
 
             case "raise":
                 // Pot-size raise: 콜 금액 + 콜 후 팟 크기
-                // 예) pot=100, toCall=20 → 추가 베팅 = 20 + (100+20) = 140
+                // 예) pot=100, toCall=20 → 추가 투입 = 20 + (100+20) = 140
                 int potSizeRaise = toCall + (s.pot + toCall);
                 potSizeRaise     = Math.max(potSizeRaise, s.bigBlindAmt); // 최소 1BB 보장
                 potSizeRaise     = Math.min(potSizeRaise, p.stack);       // 스택 초과 불가 (올인)
