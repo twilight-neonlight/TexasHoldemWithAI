@@ -1,3 +1,5 @@
+package com.texasholdem;
+
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.function.Consumer;
@@ -65,8 +67,11 @@ public class GameController {
     public synchronized void humanAction(String type) {
         state = Game.humanAction(state, type);
         notify(state);
-        // 사람이 액션하면 타이머 재개
-        if (isPlaying) rescheduleTimer();
+        // 사람이 액션한 후 즉시 다음 턴 진행
+        if (isPlaying) {
+            stopTimer(); // 타이머 중지
+            processTurn(); // 즉시 다음 턴 처리
+        }
     }
 
     public synchronized void setPlaying(boolean playing) {
@@ -118,15 +123,10 @@ public class GameController {
     // ── 타이머 / 자동 진행 ────────────────────────────────────────────────────
 
     /**
-     * 자동 진행의 핵심 tick입니다. speedMs 간격으로 호출됩니다.
-     *
-     * 우선순위:
-     *   1. 쇼다운 or READY → 아무것도 안 함 (isPlaying = false)
-     *   2. 사람 대기 중 → 아무것도 안 함
-     *   3. 베팅 라운드 종료 → nextStage or resolveShowdown
-     *   4. 진행 중 → AI 한 명 액션
+     * 자동 진행의 핵심 로직입니다.
+     * tick()과 humanAction()에서 공유합니다.
      */
-    private synchronized void tick() {
+    private synchronized void processTurn() {
         if (!isPlaying) return;
         if (state.stage == Game.Stage.READY) return;
         if (state.waitingForHuman) return;
@@ -161,6 +161,13 @@ public class GameController {
             // 사람 차례가 됐으면 타이머 정지
             if (state.waitingForHuman) stopTimer();
         }
+    }
+
+    /**
+     * 자동 진행의 핵심 tick입니다. speedMs 간격으로 호출됩니다.
+     */
+    private synchronized void tick() {
+        processTurn();
     }
 
     /** 기존 타이머를 취소하고 조건에 맞으면 새 타이머를 등록합니다. */

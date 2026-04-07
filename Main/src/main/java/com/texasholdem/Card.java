@@ -1,3 +1,5 @@
+package com.texasholdem;
+
 import java.util.Objects;
 
 /**
@@ -111,5 +113,19 @@ public class Card {
     @Override
     public int hashCode() {
         return Objects.hash(rank, suit);
+    }
+
+    // ── 테스트 ────────────────────────────────────────────────────────────────
+
+    public static void main(String[] args) {
+        // 카드 생성 테스트
+        Card c1 = Card.fromString("As");
+        Card c2 = Card.fromString("Td");
+        System.out.println("c1: " + c1 + " -> " + c1.format());
+        System.out.println("c2: " + c2 + " -> " + c2.format());
+
+        // equals 테스트
+        Card c3 = new Card(Card.Rank.ACE, Card.Suit.SPADES);
+        System.out.println("c1.equals(c3): " + c1.equals(c3));
     }
 }

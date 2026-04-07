@@ -10,13 +10,14 @@ Java로 구현한 텍사스 홀덤 포커 게임 엔진입니다.
 ```
 TexasHoldemWithAI/
 └── Main/
-    └── src/
-        ├── Card.java           # 카드 단일 객체 (Rank, Suit enum 포함)
-        ├── Deck.java           # 52장 덱 생성 및 셔플
-        ├── HandEval.java       # 핸드 평가 (족보 판정, 7장→최고 5장)
-        ├── AI.java             # 승률 추정 (몬테카를로) + 액션 결정
-        ├── Game.java           # 게임 상태 및 전이 로직 (순수 함수형)
-        └── GameController.java # 게임 흐름 제어, 자동 진행 타이머
+    └── src/main/java/com/texasholdem/
+        ├── MainApplication.java # Swing UI 메인 클래스
+        ├── GameController.java  # 게임 흐름 제어, 자동 진행 타이머
+        ├── Game.java            # 게임 상태 및 전이 로직 (순수 함수형)
+        ├── AI.java              # 승률 추정 (몬테카를로) + 액션 결정
+        ├── HandEval.java        # 핸드 평가 (족보 판정, 7장→최고 5장)
+        ├── Card.java            # 카드 단일 객체 (Rank, Suit enum 포함)
+        └── Deck.java            # 52장 덱 생성 및 셔플
 ```
 
 ---
@@ -113,29 +114,75 @@ createInitialState → startHand → [PREFLOP 베팅] → nextStage
 
 ## 컴파일 및 실행
 
+### JAR 파일 생성
 ```bash
-cd Main/src
-javac *.java
+cd Main/src/main/java
+javac com/texasholdem/*.java
+jar cfe TexasHoldem.jar com.texasholdem.MainApplication com/texasholdem/*.class
 ```
 
-`GameController`를 직접 사용하거나, `main()` 진입점을 별도로 작성해 실행합니다.
+### 실행
+```bash
+java -jar TexasHoldem.jar
+```
 
-```java
-GameController gc = new GameController(true, state -> {
-    // 상태 변경 시 UI 갱신 (JavaFX: Platform.runLater, Swing: SwingUtilities.invokeLater)
-    System.out.println(state.stage + " | pot=" + state.pot);
-});
+Swing UI가 실행되며, Texas Holdem 게임을 플레이할 수 있습니다.
 
-gc.startHand();
-gc.setPlaying(true);  // 자동 진행
-// gc.humanAction("call");  // 사람 차례에 호출
-// gc.shutdown();           // 종료 시
+### 수동 실행 (개발용)
+```bash
+cd Main/src/main/java
+javac com/texasholdem/*.java
+java com.texasholdem.MainApplication
 ```
 
 ---
 
+## UI 기능
+
+### 메인 화면
+- **테이블 중앙**: 팟 금액과 커뮤니티 카드 표시
+- **왼쪽 패널**: 플레이어 정보 (이름, 칩, 베팅액, 포지션, 카드)
+- **오른쪽 패널**: 게임 컨트롤 버튼과 설정
+- **하단**: 액션 로그와 사람 액션 버튼
+
+### 컨트롤 버튼
+- **Play/Pause**: 자동 진행 시작/정지
+- **Step**: 한 플레이어만 진행
+- **Reset**: 새 플레이어로 초기화
+- **Start Hand**: 카드 배분 및 게임 시작
+- **Next Stage**: 다음 베팅 라운드 진행
+- **Speed 슬라이더**: AI 진행 속도 조절
+- **Omniscient Mode**: 모든 카드 공개 (디버그용)
+- **Help**: 게임 사용법 표시
+
+### 사람 플레이
+- 차례가 되면 하단 액션 버튼 활성화
+- **Fold**: 핸드 포기
+- **Check**: 베팅 없이 턴 넘김
+- **Call**: 현재 베팅액 맞춤
+- **Raise**: 베팅액 올림
+
+### 정보 표시
+- **턴 플레이어**: → 화살표로 현재 차례 표시
+- **포지션**: D(딜러), SB(스몰 블라인드), BB(빅 블라인드)
+- **베팅액**: (bet: 금액)으로 이번 라운드 베팅 표시
+- **카드**: 유저는 항상 자신의 카드 확인 가능
+
+---
+
+## 게임 컨트롤러 (`GameController`)
+- `setPlaying(true)` 로 자동 진행 시작 (기본 700ms 간격)
+- `setSpeed(ms)` 로 진행 속도 조절
+- `humanAction("fold"|"call"|"check"|"raise")` 로 사람 플레이어 액션 전달
+- 베팅 라운드 종료 시 자동으로 다음 스테이지 또는 쇼다운 처리
+- 백그라운드 타이머와 메인 스레드 간 `synchronized` 보호
+- 앱 종료 시 `shutdown()` 호출 필수
+
+---
+
 ## 향후 계획
-- JavaFX / Swing UI 연동
+- JavaFX UI로 업그레이드 (더 풍부한 그래픽)
 - 사이드팟 처리 (올인 복수 플레이어)
 - 동점(split pot) 처리
 - 블라인드 레벨 상승 구조
+- 네트워크 멀티플레이 지원
